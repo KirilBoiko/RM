@@ -171,52 +171,89 @@ INDEX_HTML = """<!DOCTYPE html>
 <title>OneClick (4L) RM Decision Console</title>
 <style>
   :root {
-    --bg: #0f172a; --panel: #1e293b; --panel2: #263349; --border: #334155;
-    --text: #f1f5f9; --muted: #94a3b8; --blue: #38bdf8; --green: #22c55e;
-    --amber: #f59e0b; --red: #ef4444; --purple: #a78bfa;
+    --bg: #f6f8fc; --panel: #ffffff; --panel2: #f1f5fb; --border: #dbe3f0;
+    --text: #0f172a; --muted: #64748b; --brand: #053699; --brand-hover: #042a78;
+    --brand-soft: rgba(5, 54, 153, 0.08);
+    --blue: #053699; --green: #15803d; --amber: #b45309; --red: #dc2626;
   }
   * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif; }
   body { margin: 0; background: var(--bg); color: var(--text); font-size: 13px; }
-  header { display: flex; justify-content: space-between; align-items: center; padding: 14px 24px; background: #0b1120; border-bottom: 1px solid var(--border); }
-  header h1 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+  header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 24px; background: #ffffff;
+    border-top: 4px solid var(--brand);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 1px 3px rgba(5, 54, 153, 0.06);
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: var(--brand); }
   header .sub { color: var(--muted); font-size: 12px; margin-left: 10px; font-weight: 400; }
   .toolbar { display: flex; gap: 10px; align-items: center; }
-  select, input, button { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 12px; }
-  button { cursor: pointer; font-weight: 600; transition: opacity 0.15s; }
-  button:hover { opacity: 0.88; }
-  .btn-primary { background: #0284c7; border-color: #0369a1; }
-  .btn-approve { background: #16a34a; border-color: #15803d; }
-  .btn-modify { background: #d97706; border-color: #b45309; }
-  .btn-reject { background: #dc2626; border-color: #b91c1c; }
+  select, input, button {
+    background: #ffffff; color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 10px; font-size: 12px;
+  }
+  select:focus, input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+  button { cursor: pointer; font-weight: 600; transition: all 0.15s; }
+  button:hover { background: var(--panel2); border-color: var(--brand); }
+  .btn-primary { background: var(--brand); color: #ffffff; border-color: var(--brand); }
+  .btn-primary:hover { background: var(--brand-hover); border-color: var(--brand-hover); color: #ffffff; }
+  .btn-approve { background: #16a34a; color: #ffffff; border-color: #15803d; }
+  .btn-approve:hover { background: #15803d; color: #ffffff; }
+  .btn-modify { background: #d97706; color: #ffffff; border-color: #b45309; }
+  .btn-modify:hover { background: #b45309; color: #ffffff; }
+  .btn-reject { background: #ffffff; color: #dc2626; border-color: #fecaca; }
+  .btn-reject:hover { background: #fef2f2; border-color: #dc2626; }
   .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; padding: 16px 24px; }
-  .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
-  .kpi .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-  .kpi .val { font-size: 22px; font-weight: 700; margin-top: 4px; }
+  .kpi {
+    background: var(--panel); border: 1px solid var(--border); border-top: 3px solid var(--brand);
+    border-radius: 8px; padding: 12px 16px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+  .kpi .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+  .kpi .val { font-size: 22px; font-weight: 700; margin-top: 4px; color: var(--text); }
   main { display: grid; grid-template-columns: 1fr 390px; gap: 16px; padding: 0 24px 24px; }
   .cards { display: flex; flex-direction: column; gap: 12px; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; cursor: pointer; }
-  .card.selected { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; cursor: pointer; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .card:hover { border-color: #93b4f0; }
+  .card.selected { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
   .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
   .badge { padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; }
-  .HIGH { background: rgba(239,68,68,0.18); color: #fca5a5; border: 1px solid rgba(239,68,68,0.4); }
-  .MEDIUM { background: rgba(245,158,11,0.18); color: #fcd34d; border: 1px solid rgba(245,158,11,0.4); }
-  .LOW { background: rgba(56,189,248,0.15); color: #7dd3fc; border: 1px solid rgba(56,189,248,0.35); }
+  .HIGH { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+  .MEDIUM { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+  .LOW { background: var(--brand-soft); color: var(--brand); border: 1px solid rgba(5, 54, 153, 0.25); }
   .status-APPROVED { color: var(--green); font-weight: 700; }
   .status-MODIFIED { color: var(--amber); font-weight: 700; }
   .status-REJECTED { color: var(--red); font-weight: 700; }
-  .status-PENDING { color: var(--blue); font-weight: 600; }
-  .metrics-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; background: #131c2e; padding: 9px 12px; border-radius: 6px; margin-bottom: 10px; }
-  .m-lbl { color: var(--muted); font-size: 10px; }
-  .m-val { font-weight: 600; font-size: 13px; margin-top: 2px; }
-  .rec-box { display: flex; justify-content: space-between; align-items: center; background: var(--panel2); padding: 10px 12px; border-radius: 6px; border-left: 3px solid var(--blue); }
-  .rationale { color: #cbd5e1; font-size: 12px; margin-top: 8px; line-height: 1.45; }
+  .status-PENDING { color: var(--brand); font-weight: 700; }
+  .metrics-grid {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
+    background: #f8fafd; border: 1px solid #e6edf7; padding: 9px 12px; border-radius: 6px; margin-bottom: 10px;
+  }
+  .m-lbl { color: var(--muted); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
+  .m-val { font-weight: 600; font-size: 13px; margin-top: 2px; color: var(--text); }
+  .rec-box {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--panel2); padding: 10px 12px; border-radius: 6px;
+    border-left: 4px solid var(--brand);
+  }
+  .rationale { color: #334155; font-size: 12px; margin-top: 8px; line-height: 1.45; }
   .actions { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
-  .drawer { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; position: sticky; top: 16px; height: fit-content; max-height: calc(100vh - 32px); overflow-y: auto; }
+  .drawer {
+    background: var(--panel); border: 1px solid var(--border); border-top: 3px solid var(--brand);
+    border-radius: 8px; padding: 16px; position: sticky; top: 16px;
+    height: fit-content; max-height: calc(100vh - 32px); overflow-y: auto;
+    box-shadow: 0 2px 6px rgba(5, 54, 153, 0.06);
+  }
+  .drawer h3 { color: var(--brand); }
+  .sim-box { background: var(--panel2); border: 1px solid var(--border); padding: 10px; border-radius: 6px; margin-bottom: 14px; }
   table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
-  th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 600; font-size: 11px; }
-  .open-yes { color: var(--green); font-weight: 600; }
-  .open-no { color: var(--red); }
+  th, td { text-align: left; padding: 6px 6px; border-bottom: 1px solid var(--border); }
+  th { color: var(--brand); font-weight: 700; font-size: 11px; background: #f8fafd; }
+  .open-yes { color: var(--green); font-weight: 700; }
+  .open-no { color: var(--red); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -352,14 +389,14 @@ function selectFlight(idx) {
     <h3 style="margin:0 0 4px">${f.flight} (${f.route}) &middot; ${f.departure_date}</h3>
     <div style="color:var(--muted);margin-bottom:12px">Remaining Freesale Seats: <strong>${f.remaining_freesale_seats}</strong> | Expected Pickup: <strong>${f.rem_pickup_mean} ± ${f.rem_pickup_sd}</strong></div>
 
-    <div style="background:#131c2e;padding:10px;border-radius:6px;margin-bottom:14px">
-      <div style="font-weight:700;margin-bottom:6px">What-If Simulator</div>
+    <div class="sim-box">
+      <div style="font-weight:700;color:var(--brand);margin-bottom:6px">What-If Simulator</div>
       <div style="display:flex;gap:6px;align-items:center">
         <input id="simRbd" value="${f.emsr_recommended_rbd}" style="width:48px;text-align:center">
         <input id="simFare" type="number" value="${f.smooth_target_fare_lite_usd}" style="width:80px">
         <button class="btn-primary" onclick="runSim('${f.flight}', '${f.departure_date}')">Simulate</button>
       </div>
-      <div id="simOut" style="margin-top:8px;font-size:12px;color:#cbd5e1"></div>
+      <div id="simOut" style="margin-top:8px;font-size:12px;color:#334155"></div>
     </div>
 
     <div style="font-weight:700;margin-bottom:4px">EMSR-b RBD Protection Table</div>
