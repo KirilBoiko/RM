@@ -1,0 +1,17 @@
+# Prevent Claude Code from reading raw data binaries/CSVs directly into context.
+# Always query flight dossiers & summaries via the `oneclick-rm` MCP tools!
+.venv/
+data/
+*.duckdb
+*.duckdb.wal
+*.hyper
+*.tdsx
+*.twbx
+*.twb
+*.tflx
+*.tfl
+*.csv
+*.xlsx
+*.xls
+logs/
+uv.lock

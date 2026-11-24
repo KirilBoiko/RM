@@ -1,0 +1,31 @@
+# Hard deterministic commercial guardrails enforced BEFORE any recommendation reaches the RM.
+guardrails:
+  # Minimum allowed Click Lite fare ($) by Days Before Departure (DBD)
+  min_fare_by_dbd:
+    - max_dbd: 3
+      min_lite_usd: 180.0
+      min_rbd: "V"
+    - max_dbd: 7
+      min_lite_usd: 150.0
+      min_rbd: "N"
+    - max_dbd: 14
+      min_lite_usd: 115.0
+      min_rbd: "Q"
+    - max_dbd: 999
+      min_lite_usd: 80.0
+      min_rbd: "U"
+
+  max_lite_usd: 435.0
+
+  # Curve smoothing rules (prevents jagged manual price jumps & panic drops)
+  max_rbd_steps_up_per_day: 2
+  max_rbd_steps_down_per_day: 1
+  max_single_day_fare_increase_pct: 25.0
+  max_single_day_fare_decrease_pct: 15.0
+
+  # Late booking protection: never lower price inside D-5
+  no_price_drop_within_dbd: 5
+
+  # Competitor positioning bounds vs cheapest nonstop competitor
+  max_premium_over_nonstop_comp_when_behind_pace_usd: 20.0
+  undercut_alert_threshold_usd: 35.0

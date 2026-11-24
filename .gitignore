@@ -1,0 +1,29 @@
+# Virtualenv & Python artifacts
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Proprietary airline data & local analytical DB (NEVER commit to GitHub)
+data/*.duckdb
+data/*.duckdb.wal
+data/raw/*
+!data/raw/.gitkeep
+*.hyper
+*.tdsx
+*.twbx
+*.twb
+*.tflx
+*.tfl
+*.csv
+*.xlsx
+*.xls
+
+# Secrets & OS
+.env
+.env.*
+!.env.example
+.DS_Store
+logs/

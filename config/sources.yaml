@@ -1,0 +1,10 @@
+# Data source paths for `uv run rm-ingest`.
+# Any newer file placed in `data/raw/` with matching prefix overrides these defaults.
+sources:
+  pickup_hyper: "/Users/kirilboiko/Documents/My Tableau Prep Repository/Datasources/4L_Pickup_Forecast_Backtestv1.2.hyper"
+  sales_tdsx: "/Users/kirilboiko/Downloads/4L_sales-2.tdsx"
+  comp_price_history_hyper: "/Users/kirilboiko/Documents/My Tableau Prep Repository/Datasources/Comp_price_history.hyper"
+  price_diff_hyper: "/Users/kirilboiko/Documents/OneClick/Price_Difference.hyper"
+  cml_budget_hyper: "/Users/kirilboiko/Documents/My Tableau Prep Repository/Datasources/4L_CML_aggregated.hyper"
+  ga_funnel_hyper: "/Users/kirilboiko/Documents/My Tableau Prep Repository/Datasources/Google Analytics processed.hyper"
+  scraped_csv_glob: "/Users/kirilboiko/Documents/OneClick/2026-*_*_to_*.csv"

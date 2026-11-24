@@ -1,0 +1,109 @@
+# OneClick Airways (4L) RBD & Fare Ladder Configuration
+# NOTE: Initialized from empirical medians of 6,548 historical 4L tickets (`4L_sales`).
+# Replace `lite_usd` / `stand_usd` with official PSS tariff sheet values once provided by RM.
+
+default_stand_upsell_usd: 50.0
+
+routes:
+  DEFAULT:
+    currency: "USD"
+    budget_slf_pct: 85.0
+    budget_avg_fare_usd: 135.0
+    # Ordered strictly from lowest (index 0) to highest (index 11)
+    ladder:
+      - rbd: "U"
+        tier_index: 1
+        label: "Promo / Deep Saver"
+        lite_usd: 80.0
+        stand_usd: 130.0
+        demand_share: 0.12
+      - rbd: "Q"
+        tier_index: 2
+        label: "Saver 1"
+        lite_usd: 115.0
+        stand_usd: 150.0
+        demand_share: 0.24
+      - rbd: "O"
+        tier_index: 3
+        label: "Saver 2"
+        lite_usd: 134.0
+        stand_usd: 180.0
+        demand_share: 0.14
+      - rbd: "N"
+        tier_index: 4
+        label: "Value 1"
+        lite_usd: 153.0
+        stand_usd: 205.0
+        demand_share: 0.16
+      - rbd: "V"
+        tier_index: 5
+        label: "Value 2"
+        lite_usd: 180.0
+        stand_usd: 230.0
+        demand_share: 0.09
+      - rbd: "M"
+        tier_index: 6
+        label: "Standard 1"
+        lite_usd: 200.0
+        stand_usd: 250.0
+        demand_share: 0.10
+      - rbd: "L"
+        tier_index: 7
+        label: "Standard 2"
+        lite_usd: 235.0
+        stand_usd: 285.0
+        demand_share: 0.06
+      - rbd: "T"
+        tier_index: 8
+        label: "Flex 1"
+        lite_usd: 255.0
+        stand_usd: 305.0
+        demand_share: 0.03
+      - rbd: "B"
+        tier_index: 9
+        label: "Flex 2"
+        lite_usd: 280.0
+        stand_usd: 325.0
+        demand_share: 0.025
+      - rbd: "R"
+        tier_index: 10
+        label: "High Flex"
+        lite_usd: 295.0
+        stand_usd: 345.0
+        demand_share: 0.015
+      - rbd: "K"
+        tier_index: 11
+        label: "Last Seat 1"
+        lite_usd: 335.0
+        stand_usd: 385.0
+        demand_share: 0.012
+      - rbd: "Y"
+        tier_index: 12
+        label: "Full Economy"
+        lite_usd: 435.0
+        stand_usd: 485.0
+        demand_share: 0.008
+
+  TBS-TLV:
+    inherit: "DEFAULT"
+    budget_slf_pct: 85.0
+    budget_avg_fare_usd: 135.0
+    direct_competitors: ["EL AL", "Arkia", "ISRAIR", "Georgian Airways"]
+
+  TLV-TBS:
+    inherit: "DEFAULT"
+    budget_slf_pct: 85.0
+    budget_avg_fare_usd: 135.0
+    direct_competitors: ["EL AL", "Arkia", "ISRAIR", "Georgian Airways"]
+
+  BUS-TLV:
+    inherit: "DEFAULT"
+    budget_slf_pct: 85.0
+    budget_avg_fare_usd: 140.0
+    direct_competitors: ["EL AL", "Arkia", "ISRAIR"]
+
+  TLV-BUS:
+    inherit: "DEFAULT"
+    budget_slf_pct: 85.0
+    budget_avg_fare_usd: 140.0
+    direct_competitors: ["EL AL", "Arkia", "ISRAIR"]

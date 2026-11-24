@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "oneclick-rm": {
+      "command": "uv",
+      "args": [
+        "run",
+        "rm-mcp"
+      ]
+    }
+  }
+}
