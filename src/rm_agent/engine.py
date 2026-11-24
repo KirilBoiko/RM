@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import datetime as dt
 import math
+from collections import defaultdict
 from typing import Any, Optional
 
+import numpy as np
 from scipy.stats import norm
 
 from .config import get_guardrails_config, get_route_ladder
@@ -249,7 +251,130 @@ def _fetch_competitor_summary(conn: Any, route: str, dep_date: dt.date) -> Compe
     )
 
 
-def build_flight_dossier(conn: Any, row: tuple[Any, ...]) -> FlightDossier:
+def _load_empirical_curve(conn: Any) -> dict[str, dict[int, tuple[float, float, float]]]:
+    """
+    Build a transparent empirical booking curve & rolling 12-flight additive pickup table
+    strictly from actual departed flights (ignoring inflated Prep benchmark columns).
+    Returns: {route: {depth: (median_lf_pct, mean_rem_pickup, sd_rem_pickup)}}
+    """
+    rows = conn.execute("""
+        WITH finals AS (
+            SELECT flight_id, route, departure_date, MAX(cumulative_net_bookings) AS final_pax
+            FROM flights_pickup
+            WHERE completion_status = 'Departed'
+            GROUP BY 1, 2, 3
+        ),
+        ranked AS (
+            SELECT
+                f.route,
+                p.depth,
+                p.commercial_lf_pct,
+                GREATEST(f.final_pax - p.cumulative_net_bookings, 0) AS rem_pickup,
+                ROW_NUMBER() OVER (PARTITION BY f.route, p.depth ORDER BY f.departure_date DESC) AS recency_rn
+            FROM flights_pickup p
+            JOIN finals f ON p.flight_id = f.flight_id
+            WHERE p.completion_status = 'Departed'
+        )
+        SELECT
+            route,
+            depth,
+            MEDIAN(commercial_lf_pct) AS med_lf,
+            AVG(CASE WHEN recency_rn <= 12 THEN rem_pickup END) AS mean_rem_12,
+            STDDEV_SAMP(CASE WHEN recency_rn <= 12 THEN rem_pickup END) AS sd_rem_12
+        FROM ranked
+        GROUP BY 1, 2
+    """).fetchall()
+
+    curve: dict[str, dict[int, tuple[float, float, float]]] = defaultdict(dict)
+    for route, depth, med_lf, mean_rem, sd_rem in rows:
+        if depth is None:
+            continue
+        m_lf = float(med_lf) if med_lf is not None else 0.0
+        m_rem = float(mean_rem) if mean_rem is not None else 0.0
+        s_rem = float(sd_rem) if (sd_rem is not None and not math.isnan(sd_rem)) else max(m_rem * 0.35, 2.0)
+        curve[str(route)][int(depth)] = (m_lf, m_rem, s_rem)
+    return curve
+
+
+def _lookup_empirical(
+    curve: dict[str, dict[int, tuple[float, float, float]]],
+    route: str,
+    depth: int,
+) -> Optional[tuple[float, float, float]]:
+    rd = curve.get(route)
+    if not rd:
+        return None
+    if depth in rd:
+        return rd[depth]
+    nearest_d = min(rd.keys(), key=lambda d: abs(d - depth))
+    return rd[nearest_d]
+
+
+def run_walkforward_backtest(depths: tuple[int, ...] = (21, 14, 7, 3)) -> list[dict[str, Any]]:
+    """
+    Out-of-sample walk-forward backtest on all departed flights.
+    For each departed flight i (after min 8 prior flights), predicts final PAX using
+    only strictly earlier flights (rolling last 12 flights additive pickup).
+    """
+    conn = get_conn(read_only=True)
+    try:
+        rows = conn.execute(f"""
+            WITH finals AS (
+                SELECT flight_id, route, departure_date, net_sellable_capacity,
+                       MAX(cumulative_net_bookings) AS final_pax
+                FROM flights_pickup
+                WHERE completion_status = 'Departed'
+                GROUP BY 1, 2, 3, 4
+            )
+            SELECT f.flight_id, f.route, f.departure_date, p.depth,
+                   p.cumulative_net_bookings AS cum_pax,
+                   f.final_pax,
+                   f.net_sellable_capacity,
+                   GREATEST(f.final_pax - p.cumulative_net_bookings, 0) AS actual_rem_pickup
+            FROM flights_pickup p
+            JOIN finals f ON p.flight_id = f.flight_id
+            WHERE p.completion_status = 'Departed'
+              AND p.depth IN ({','.join(str(d) for d in depths)})
+            ORDER BY f.route, p.depth, f.departure_date
+        """).fetchall()
+    finally:
+        conn.close()
+
+    by_rd: dict[tuple[str, int], list[tuple[Any, ...]]] = defaultdict(list)
+    for r in rows:
+        by_rd[(str(r[1]), int(r[3]))].append(r)
+
+    results: list[dict[str, Any]] = []
+    for (route, dbd), items in sorted(by_rd.items(), key=lambda x: (x[0][0], -x[0][1])):
+        if len(items) < 10:
+            continue
+        errs = []
+        actuals = []
+        for i in range(8, len(items)):
+            recent = items[max(0, i - 12):i]
+            test = items[i]
+            mean_rem = float(np.mean([t[7] for t in recent]))
+            pred_final = min(float(test[6]), float(test[4]) + mean_rem)
+            errs.append(pred_final - float(test[5]))
+            actuals.append(float(test[5]))
+        results.append({
+            "route": route,
+            "dbd": dbd,
+            "n_test": len(errs),
+            "avg_actual_final_pax": round(float(np.mean(actuals)), 1),
+            "mae_pax": round(float(np.mean(np.abs(errs))), 1),
+            "bias_pax": round(float(np.mean(errs)), 1),
+            "within_10_pct": round(float(np.mean([abs(e) <= 10 for e in errs])) * 100.0, 1),
+            "within_15_pct": round(float(np.mean([abs(e) <= 15 for e in errs])) * 100.0, 1),
+        })
+    return results
+
+
+def build_flight_dossier(
+    conn: Any,
+    row: tuple[Any, ...],
+    empirical_curve: Optional[dict[str, dict[int, tuple[float, float, float]]]] = None,
+) -> FlightDossier:
     (
         flight_id, flight, route, dep_date, weekday, current_depth,
         capacity, blocked_seats, net_cap, onhand_pax, avg_price_depth,
@@ -265,16 +390,27 @@ def build_flight_dossier(conn: Any, row: tuple[Any, ...]) -> FlightDossier:
     rem_seats = max(net_cap - onhand_pax, 0)
     freesale_lf_pct = round(float(comm_lf if comm_lf is not None else (onhand_pax / net_cap * 100.0)), 1)
     total_lf_pct = round(float(total_lf if total_lf is not None else ((onhand_pax + (blocked_seats or 0)) / max(capacity, 1) * 100.0)), 1)
-    bm_lf_pct = round(float(bm_lf or 0.0), 1)
-    pace_pct = round(float(pace_vs_bm or (freesale_lf_pct - bm_lf_pct)), 1)
 
-    fc_final = round(float(fc_final_pax if fc_final_pax is not None else onhand_pax + (rem_mean or 0.0)), 1)
-    fc_low = round(float(fc_low95 if fc_low95 is not None else max(onhand_pax, fc_final - 12)), 1)
-    fc_high = round(float(fc_high95 if fc_high95 is not None else min(net_cap, fc_final + 12)), 1)
+    emp = _lookup_empirical(empirical_curve, str(route), int(current_depth)) if empirical_curve else None
+    if emp is not None:
+        emp_med_lf, emp_rem_mean, emp_rem_sd = emp
+        bm_lf_pct = round(emp_med_lf, 1)
+        pace_pct = round(freesale_lf_pct - bm_lf_pct, 1)
+        rem_mean_val = round(emp_rem_mean, 1)
+        rem_sd_val = round(max(emp_rem_sd, 2.0), 1)
+        fc_final = round(min(float(net_cap), float(onhand_pax) + rem_mean_val), 1)
+        fc_low = round(max(float(onhand_pax), fc_final - 1.64 * rem_sd_val), 1)
+        fc_high = round(min(float(net_cap), fc_final + 1.64 * rem_sd_val), 1)
+    else:
+        bm_lf_pct = round(float(bm_lf or 0.0), 1)
+        pace_pct = round(freesale_lf_pct - bm_lf_pct, 1)
+        fc_final = round(float(fc_final_pax if fc_final_pax is not None else onhand_pax + (rem_mean or 0.0)), 1)
+        fc_low = round(float(fc_low95 if fc_low95 is not None else max(onhand_pax, fc_final - 12)), 1)
+        fc_high = round(float(fc_high95 if fc_high95 is not None else min(net_cap, fc_final + 12)), 1)
+        rem_mean_val = float(rem_mean if rem_mean is not None else max(fc_final - onhand_pax, 1.0))
+        rem_sd_val = float(rem_sd if rem_sd is not None else max(rem_mean_val * 0.35, 2.0))
+
     fc_final_lf = round(fc_final / net_cap * 100.0, 1)
-
-    rem_mean_val = float(rem_mean if rem_mean is not None else max(fc_final - onhand_pax, 1.0))
-    rem_sd_val = float(rem_sd if rem_sd is not None else max(rem_mean_val * 0.35, 2.0))
 
     # Lookup latest ticket sales on this flight
     tkt = conn.execute(
@@ -514,7 +650,8 @@ def get_triage_dossiers(
             f"SELECT * FROM ({_LATEST_FLIGHTS_SQL}) sub WHERE current_depth <= ? {where_extra} ORDER BY departure_date ASC",
             params,
         ).fetchall()
-        dossiers = [build_flight_dossier(conn, r) for r in rows]
+        emp_curve = _load_empirical_curve(conn)
+        dossiers = [build_flight_dossier(conn, r, empirical_curve=emp_curve) for r in rows]
     finally:
         conn.close()
 
@@ -535,7 +672,8 @@ def get_single_flight_dossier(flight: str, departure_date: str | dt.date) -> Opt
         ).fetchone()
         if not row:
             return None
-        return build_flight_dossier(conn, row)
+        emp_curve = _load_empirical_curve(conn)
+        return build_flight_dossier(conn, row, empirical_curve=emp_curve)
     finally:
         conn.close()
 
@@ -684,8 +822,8 @@ def seed_deterministic_recommendations(limit: int = 20, preserve_ai: bool = True
         )
         rationale = (
             f"D-{d.current_depth} | Freesale LF {d.freesale_lf_pct:.1f}% ({d.on_hand_freesale_pax}/{d.net_sellable_capacity} net seats, {d.blocked_seats} blocked) "
-            f"vs {d.benchmark_lf_at_depth_pct:.1f}% curve ({d.pace_vs_benchmark_pct:+.1f}%). "
-            f"Chain-ladder projects {d.forecast_final_freesale_pax:.0f} pax ({d.forecast_final_freesale_lf_pct:.0f}% LF); "
+            f"vs {d.benchmark_lf_at_depth_pct:.1f}% historical median ({d.pace_vs_benchmark_pct:+.1f}pp). "
+            f"Rolling-12 pickup projects {d.forecast_final_freesale_pax:.0f} pax ({d.forecast_final_freesale_lf_pct:.0f}% LF); "
             f"EMSR-b bid price = ${d.emsr_bid_price_usd:.0f} (tier {d.emsr_recommended_rbd}). {comp_str}"
         )
         risks = "; ".join(d.guardrails.warnings or d.alert_flags[:2]) or "Standard booking volatility on thin weekly schedule."

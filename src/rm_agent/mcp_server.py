@@ -9,6 +9,7 @@ from .db import get_conn
 from .engine import (
     get_single_flight_dossier,
     get_triage_dossiers,
+    run_walkforward_backtest,
     save_recommendation,
     simulate_action,
 )
@@ -166,6 +167,15 @@ def get_recent_decisions(limit: int = 20) -> list[dict]:
         ]
     finally:
         conn.close()
+
+
+@mcp.tool()
+def get_backtest_accuracy() -> list[dict]:
+    """
+    Return walk-forward out-of-sample forecast accuracy (MAE, Bias, Within +/-10 & +/-15 pax)
+    by Route and DBD on departed flights so the agent can calibrate confidence scientifically.
+    """
+    return run_walkforward_backtest()
 
 
 def main() -> None:

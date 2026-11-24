@@ -10,6 +10,7 @@ from .db import get_conn
 from .engine import (
     get_single_flight_dossier,
     get_triage_dossiers,
+    run_walkforward_backtest,
     seed_deterministic_recommendations,
     simulate_action,
 )
@@ -135,6 +136,11 @@ def api_refresh_baseline() -> dict:
     return {"ok": True, "refreshed": n}
 
 
+@app.get("/api/backtest")
+def api_backtest() -> list[dict]:
+    return run_walkforward_backtest()
+
+
 @app.get("/api/ledger")
 def api_ledger() -> list[dict]:
     conn = get_conn(read_only=True)
@@ -254,6 +260,14 @@ INDEX_HTML = """<!DOCTYPE html>
   th { color: var(--brand); font-weight: 700; font-size: 11px; background: #f8fafd; }
   .open-yes { color: var(--green); font-weight: 700; }
   .open-no { color: var(--red); font-weight: 600; }
+  .tabs { display: flex; gap: 6px; padding: 10px 24px 0; background: #ffffff; border-bottom: 1px solid var(--border); }
+  .tab-btn { background: transparent; border: none; border-bottom: 3px solid transparent; border-radius: 0; padding: 8px 14px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .tab-btn:hover { color: var(--brand); background: transparent; border-color: transparent; }
+  .tab-btn.active { color: var(--brand); border-bottom-color: var(--brand); }
+  .audit-wrap { padding: 16px 24px 28px; display: grid; grid-template-columns: 1fr; gap: 18px; }
+  .audit-card { background: var(--panel); border: 1px solid var(--border); border-top: 3px solid var(--brand); border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(5, 54, 153, 0.05); }
+  .audit-card h2 { margin: 0 0 4px; font-size: 15px; color: var(--brand); }
+  .audit-sub { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
 </style>
 </head>
 <body>
@@ -279,18 +293,94 @@ INDEX_HTML = """<!DOCTYPE html>
   </div>
 </header>
 
-<section class="kpis" id="kpiStrip"></section>
+<div class="tabs">
+  <button class="tab-btn active" id="tabTriage" onclick="switchTab('triage')">Live Triage</button>
+  <button class="tab-btn" id="tabAudit" onclick="switchTab('audit')">Backtest &amp; Decision Audit</button>
+</div>
 
-<main>
-  <div class="cards" id="flightCards"></div>
-  <aside class="drawer" id="detailDrawer">
-    <div style="color:var(--muted)">Click any flight card on the left to inspect its EMSR-b protection ladder, competitor offers, and What-If simulator.</div>
-  </aside>
-</main>
+<div id="viewTriage">
+  <section class="kpis" id="kpiStrip"></section>
+  <main>
+    <div class="cards" id="flightCards"></div>
+    <aside class="drawer" id="detailDrawer">
+      <div style="color:var(--muted)">Click any flight card on the left to inspect its EMSR-b protection ladder, competitor offers, and What-If simulator.</div>
+    </aside>
+  </main>
+</div>
+
+<div id="viewAudit" class="audit-wrap" style="display:none">
+  <div class="audit-card">
+    <h2>Walk-Forward Out-of-Sample Forecast Backtest</h2>
+    <div class="audit-sub">Strictly leave-future-out validation on departed flights: rolling 12-flight additive pickup trained only on earlier departures.</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Route</th><th>Depth</th><th>Test Flights</th><th>Avg Actual Final Pax</th>
+          <th>MAE (seats)</th><th>Bias (Pred - Act)</th><th>Within ±10 seats</th><th>Within ±15 seats</th>
+        </tr>
+      </thead>
+      <tbody id="backtestBody"></tbody>
+    </table>
+  </div>
+  <div class="audit-card">
+    <h2>RM Decision Ledger (Overrides &amp; Approvals)</h2>
+    <div class="audit-sub">All Approved, Modified, and Rejected recommendations logged for audit &amp; agent learning.</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Flight</th><th>Route</th><th>Dep Date</th><th>DBD</th><th>Source</th>
+          <th>Proposed</th><th>RM Status</th><th>Final RBD / $</th><th>RM Notes</th><th>Decided At</th>
+        </tr>
+      </thead>
+      <tbody id="ledgerBody"></tbody>
+    </table>
+  </div>
+</div>
 
 <script>
 let FLIGHTS = [];
 let SELECTED_IDX = 0;
+
+function switchTab(tab) {
+  document.getElementById('viewTriage').style.display = tab === 'triage' ? 'block' : 'none';
+  document.getElementById('viewAudit').style.display = tab === 'audit' ? 'grid' : 'none';
+  document.getElementById('tabTriage').classList.toggle('active', tab === 'triage');
+  document.getElementById('tabAudit').classList.toggle('active', tab === 'audit');
+  if (tab === 'audit') loadAudit();
+}
+
+async function loadAudit() {
+  const [btRes, ledRes] = await Promise.all([fetch('/api/backtest'), fetch('/api/ledger')]);
+  const bt = await btRes.json();
+  const led = await ledRes.json();
+  document.getElementById('backtestBody').innerHTML = bt.map(r => `
+    <tr>
+      <td><strong>${r.route}</strong></td>
+      <td>D-${r.dbd}</td>
+      <td>${r.n_test}</td>
+      <td>${r.avg_actual_final_pax}</td>
+      <td><strong>${r.mae_pax}</strong></td>
+      <td style="color:${Math.abs(r.bias_pax)<=3?'var(--green)':'var(--amber)'}">${r.bias_pax>0?'+':''}${r.bias_pax}</td>
+      <td>${r.within_10_pct}%</td>
+      <td><strong>${r.within_15_pct}%</strong></td>
+    </tr>
+  `).join('') || '<tr><td colspan="8" style="color:var(--muted)">Not enough departed flights yet</td></tr>';
+
+  document.getElementById('ledgerBody').innerHTML = led.map(r => `
+    <tr>
+      <td><strong>${r.flight}</strong></td>
+      <td>${r.route}</td>
+      <td>${r.departure_date}</td>
+      <td>D-${r.dbd}</td>
+      <td><em>${r.source}</em></td>
+      <td>${r.action_type} &rarr; ${r.rec_rbd} ($${r.rec_fare})</td>
+      <td class="status-${r.status}">${r.status}</td>
+      <td><strong>${r.final_rbd} ($${r.final_fare})</strong></td>
+      <td>${r.notes || '—'}</td>
+      <td style="color:var(--muted)">${r.decided_at}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="10" style="color:var(--muted)">No RM decisions logged yet — Approve, Modify, or Reject a card in Live Triage.</td></tr>';
+}
 
 async function loadTriage() {
   const route = document.getElementById('routeFilter').value;
