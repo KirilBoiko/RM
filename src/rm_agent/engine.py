@@ -656,10 +656,23 @@ def save_recommendation(
         conn.close()
 
 
-def seed_deterministic_recommendations(limit: int = 20) -> int:
+def seed_deterministic_recommendations(limit: int = 20, preserve_ai: bool = True) -> int:
     dossiers = get_triage_dossiers(limit=limit, max_dbd=60)
+    existing_ai: set[tuple[str, str]] = set()
+    if preserve_ai:
+        conn = get_conn(read_only=True)
+        try:
+            rows = conn.execute(
+                "SELECT flight, departure_date FROM recommendations WHERE status = 'PENDING' AND source <> 'deterministic'"
+            ).fetchall()
+            existing_ai = {(str(r[0]), str(r[1])) for r in rows}
+        finally:
+            conn.close()
+
     count = 0
     for d in dossiers:
+        if preserve_ai and (d.flight, str(d.departure_date)) in existing_ai:
+            continue
         comp_str = (
             f"Cheapest nonstop competitor ({d.competitors.exact_date_nonstop_airline}) is ${d.competitors.exact_date_nonstop_min_usd:.0f}."
             if d.competitors.exact_date_nonstop_min_usd

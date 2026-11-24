@@ -237,7 +237,8 @@ INDEX_HTML = """<!DOCTYPE html>
       <option value="60" selected>Next 60 Days</option>
       <option value="120">Next 120 Days</option>
     </select>
-    <button class="btn-primary" onclick="refreshBaseline()">Recalculate Engine</button>
+    <button class="btn-primary" onclick="loadTriage()">Refresh View</button>
+    <button onclick="refreshBaseline()" title="Recalculates deterministic engine cards without overwriting Claude/LLM recommendations">Recalc Baseline</button>
   </div>
 </header>
 
